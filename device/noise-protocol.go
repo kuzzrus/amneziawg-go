@@ -634,6 +634,18 @@ func (device *Device) JunkPackets() [][]byte {
 
 	min := device.junk.min.Load()
 	max := device.junk.max.Load()
+	// A max < min (jmax set below jmin over the UAPI, or left at its
+	// zero-value default while jmin is set) would otherwise underflow
+	// this unsigned subtraction to near 2^32, allocating a
+	// multi-gigabyte buffer per junk packet. Clamping here, at the
+	// actual point of use, is safe regardless of the order individual
+	// UAPI lines arrive in during a config update -- an
+	// ordering-dependent check in the UAPI setters themselves (jc/jmin/
+	// jmax are parsed independently, uapi.go) would risk rejecting a
+	// legitimate multi-line reconfiguration mid-transaction.
+	if max < min {
+		max = min
+	}
 
 	for range device.junk.count.Load() {
 		buf := make([]byte, min+fastrandn(max-min))
